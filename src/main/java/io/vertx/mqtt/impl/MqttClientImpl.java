@@ -742,7 +742,10 @@ public class MqttClientImpl implements MqttClient {
           MqttConnAckMessage mqttConnAckMessage = MqttConnAckMessage.create(
             connack.variableHeader().connectReturnCode(),
             connack.variableHeader().isSessionPresent());
-          handleConnack(mqttConnAckMessage);
+          boolean needCloseCurrentConnection = handleConnack(mqttConnAckMessage);
+          if (needCloseCurrentConnection) {
+            chctx.close();
+          }
           break;
 
         case PUBLISH:
@@ -958,12 +961,10 @@ public class MqttClientImpl implements MqttClient {
    * Used for calling the connect handler when the server replies to the request
    *
    * @param msg  connection response message
+   * @return do we need to close current connection?
    */
-  private void handleConnack(MqttConnAckMessage msg) {
-
-    synchronized (this) {
-      this.isConnected = msg.code() == MqttConnectReturnCode.CONNECTION_ACCEPTED;
-    }
+  private boolean handleConnack(MqttConnAckMessage msg) {
+    boolean toCloseCurrentConnection = msg.code() != MqttConnectReturnCode.CONNECTION_ACCEPTED;
 
     Handler<AsyncResult<MqttConnAckMessage>> handler = connectHandler();
     if (handler != null) {
@@ -976,6 +977,8 @@ public class MqttClientImpl implements MqttClient {
         handler.handle(Future.failedFuture(exception));
       }
     }
+
+    return toCloseCurrentConnection;
   }
 
   /**
